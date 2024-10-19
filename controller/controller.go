@@ -1,8 +1,8 @@
 package controller
 
 import (
-	"GoRestApi/db"
 	"GoRestApi/models"
+	"GoRestApi/repository"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -10,72 +10,68 @@ import (
 	"github.com/gorilla/mux"
 )
 
-func AddMovie(w http.ResponseWriter, r *http.Request) {
-	decoder := json.NewDecoder(r.Body)
-	var movie models.Movie
-	err := decoder.Decode(&movie)
-
-	if err != nil {
-		log.Println(err.Error())
-	}
-	db.MovieList = append(db.MovieList, movie)
-
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(http.StatusOK)
-
-}
-
+// GetAllMovies handles the request to retrieve all movies
 func GetAllMovies(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.WriteHeader(http.StatusOK)
-	allMovies := db.MovieList
-	json.NewEncoder(w).Encode(allMovies)
-}
-
-func GetMovieById(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	id := mux.Vars(r)["id"]
-
-	for _, movie := range db.MovieList {
-
-		if id == movie.Id {
-
-			json.NewEncoder(w).Encode(movie)
-			return
-		}
+	movies, err := repository.GetAllMovies()
+	if err != nil {
+		http.Error(w, "Failed to retrieve movies", http.StatusInternalServerError)
+		return
 	}
-	message := models.Message{Message: "Movie Not found"}
-	json.NewEncoder(w).Encode(message)
+	json.NewEncoder(w).Encode(movies)
 }
 
-func DeleteMovieById(w http.ResponseWriter, r *http.Request) {
+// GetMovieByID handles the request to retrieve a specific movie by ID
+func GetMovieByID(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+	id := params["id"]
 
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	id := mux.Vars(r)["id"]
-
-	for index, movie := range db.MovieList {
-		if id == movie.Id {
-			db.MovieList = append(db.MovieList[:index], db.MovieList[index+1:]...)
-			break
-		}
+	movie, err := repository.GetMovieByID(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
 	}
-	json.NewEncoder(w).Encode(db.MovieList)
-
+	json.NewEncoder(w).Encode(movie)
 }
 
-func UpdateMovie(w http.ResponseWriter, r *http.Request) {
-
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+// AddMovie handles the request to add a new movie
+func AddMovie(w http.ResponseWriter, r *http.Request) {
 	var movie models.Movie
-
-	json.NewDecoder(r.Body).Decode(&movie)
-
-	for index, movieToUpdate := range db.MovieList {
-
-		if movieToUpdate.Id == movie.Id {
-
-			db.MovieList[index] = movie
-		}
+	if err := json.NewDecoder(r.Body).Decode(&movie); err != nil {
+		http.Error(w, "Invalid input", http.StatusBadRequest)
+		return
 	}
 
+	if err := repository.AddMovie(movie); err != nil {
+		log.Printf("Failed to add movie: %v", err)
+		http.Error(w, "Failed to add movie", http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(models.Message{Message: "Movie added"})
+}
+
+// DeleteMovieByID handles the request to delete a movie by ID
+func DeleteMovieByID(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+	id := params["id"]
+
+	if err := repository.DeleteMovieByID(id); err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	json.NewEncoder(w).Encode(models.Message{Message: "Movie deleted"})
+}
+
+// UpdateMovie handles the request to update an existing movie
+func UpdateMovie(w http.ResponseWriter, r *http.Request) {
+	var movie models.Movie
+	if err := json.NewDecoder(r.Body).Decode(&movie); err != nil {
+		http.Error(w, "Invalid input", http.StatusBadRequest)
+		return
+	}
+
+	if err := repository.UpdateMovie(movie); err != nil {
+		http.Error(w, "Failed to update movie", http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(models.Message{Message: "Movie updated"})
 }
